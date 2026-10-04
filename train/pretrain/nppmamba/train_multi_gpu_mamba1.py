@@ -117,15 +117,15 @@ class Trainer():
         # Load loss bin weights
         self.loss_bin = pickle_load('{}/loss_bin_pp.pkl'.format(self.params.stat_dir))
         self.loss_weight = pickle_load('{}/loss_weight_pp.pkl'.format(self.params.stat_dir))
-
+        
         # Get data loaders
         self.train_data_loader, self.train_sampler, self.valid_data_loader, _ = \
             get_data_loader(self.params, dist.is_initialized())
 
-        # 1. Establish the Device Mesh for Data Parallelism
+        # Establish the Device Mesh for Data Parallelism
         device_mesh = init_device_mesh("cuda", (torch.cuda.device_count(),))
 
-        # 2. Define your Mixed Precision Policy (essential for Mamba's numerical stability)
+        # Define your Mixed Precision Policy (essential for Mamba's numerical stability)
         # It is highly recommended to keep reduction/scan steps in high precision
         mp_policy = MixedPrecisionPolicy(
             param_dtype=torch.float32, 
@@ -172,15 +172,6 @@ class Trainer():
         if self.world_rank == 0:
             print(f'Nparams: {count_parameters(self.model):,}')
 
-        # Distributed wrapper
-        #if dist.is_initialized():
-        #    self.model = DistributedDataParallel(
-        #        self.model,
-        #        device_ids=[self.local_rank],
-        #        output_device=[self.local_rank],
-        #        find_unused_parameters=True
-        #    )
-
         # Standard optimizer (no μ-transfer)
         # Simple AdamW with single learning rate for all parameters
         self.optimizer = torch.optim.AdamW(
@@ -193,8 +184,6 @@ class Trainer():
         if self.world_rank == 0:
             print(f"✅ Using standard AdamW optimizer (no μ-transfer scaling)")
             print(f"   Learning rate: {self.params.min_lr}")
-
-        # No mixed precision for Mamba1 (testing simplification alone)
 
         # Learning rate scheduler
         self.scheduler = CosineAnnealingWarmupRestarts(
@@ -257,34 +246,25 @@ class Trainer():
                 print(f"Resuming from epoch {self.startEpoch}, iteration {self.iters}")
 
     def save_checkpoint(self, checkpoint_path, is_best=False):
-        """Save checkpoint"""
-        if self.world_rank != 0:
-            return
-
-        try:
-            model_state = self.model.module.state_dict() if dist.is_initialized() else self.model.state_dict()
-        except:
-            model_state = self.model.state_dict()
-
-        torch.save({
-            'iters': self.iters,
-            'epoch': self.epoch,
-            'model_state': model_state,
-            'optimizer_state_dict': self.optimizer.state_dict(),
-        }, checkpoint_path)
-
-        if is_best:
-            best_path = checkpoint_path.replace('.tar', '_best.tar')
+        """Save checkpoint""" 
+        model_state = self.model.state_dict()
+        if self.world_rank == 0:
             torch.save({
                 'iters': self.iters,
                 'epoch': self.epoch,
                 'model_state': model_state,
                 'optimizer_state_dict': self.optimizer.state_dict(),
-            }, best_path)
-            if self.world_rank == 0:
+            }, checkpoint_path)
+            if is_best:
+                best_path = checkpoint_path.replace('.tar', '_best.tar')
+                torch.save({
+                    'iters': self.iters,
+                    'epoch': self.epoch,
+                    'model_state': model_state,
+                    'optimizer_state_dict': self.optimizer.state_dict(),
+                }, best_path)
                 print(f"Saved best checkpoint to {best_path}")
-        else:
-            if self.world_rank == 0:
+            else:
                 print(f"Saved checkpoint to {checkpoint_path}")
 
     def report_loss(self, loss, dist_state):
@@ -440,10 +420,13 @@ class Trainer():
             is_best_loss = True
             self.best_loss = self.logs['val_loss']
 
-        # Save checkpoint
+        # Save checkpoint (Rank 0)
         if self.params.save_checkpoint:
             self.save_checkpoint(self.checkpoint_path, is_best=is_best_loss)
 
+        # Force all ranks to wait until Rank 0 is finished 
+        dist.barrier(); 
+            
         # Print and log results
         tolog = 'Time taken {:.2f} sec; with {:.2f} / {:.2f} in tr/val\n'.format(
             time.time() - self.starttime if hasattr(self, 'starttime') else val_time,
@@ -481,9 +464,7 @@ class Trainer():
 
             self.epoch = epoch
             self.starttime = time.time()
-
-            if dist.is_initialized() and self.train_sampler:
-                self.train_sampler.set_epoch(epoch)
+            self.train_sampler.set_epoch(epoch)
 
             tr_time = self.train_one_epoch()
 
