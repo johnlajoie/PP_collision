@@ -68,9 +68,18 @@ def run_downstream(config, run_num, num_gpus=1):
     config_file = os.path.join(project_root, 'scripts/configs/mamba_tracking.yaml')
     training_script = os.path.join(project_root, 'train/downstream/track_finding_trainer.py')
 
+#    cmd = [
+#        sys.executable,
+#        '-m', 'torch.distributed.launch',
+#        f'--nproc_per_node={num_gpus}',
+#        training_script,
+#        f'--yaml_config={config_file}',
+#        f'--config={config}',
+#        f'--run_num={run_num}'
+#    ]
+
     cmd = [
-        sys.executable,
-        '-m', 'torch.distributed.launch',
+        'torchrun',
         f'--nproc_per_node={num_gpus}',
         training_script,
         f'--yaml_config={config_file}',
