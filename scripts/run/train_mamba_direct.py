@@ -26,6 +26,8 @@ def setup_environment():
     # Set environment variables
     os.environ.setdefault('MASTER_ADDR', 'localhost')
     os.environ.setdefault('MASTER_PORT', '29500')
+    # set up to number of physical cores
+    os.environ.setdefault('OMP_NUM_THREADS', '12')
 
     # Add project root to Python path
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
@@ -38,9 +40,18 @@ def run_pretrain(config, run_num, num_gpus=1):
     project_root = setup_environment()
     config_file = os.path.join(project_root, 'scripts/configs/mamba_pretrain.yaml')
 
+#    cmd = [
+#        sys.executable,
+#        '-m', 'torch.distributed.launch',
+#        f'--nproc_per_node={num_gpus}',
+#        '-m', 'train.pretrain.nppmamba.train_multi_gpu_mamba1',
+#        f'--yaml_config={config_file}',
+#        f'--config={config}',
+#        f'--run_num={run_num}'
+#    ]
+
     cmd = [
-        sys.executable,
-        '-m', 'torch.distributed.launch',
+        'torchrun',
         f'--nproc_per_node={num_gpus}',
         '-m', 'train.pretrain.nppmamba.train_multi_gpu_mamba1',
         f'--yaml_config={config_file}',

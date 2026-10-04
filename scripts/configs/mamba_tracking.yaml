@@ -4,15 +4,15 @@
 # Default configuration
 default: &default
   # === Data Paths (UPDATE THESE) ===
-  data_root: /global/cfs/cdirs/m4722/NPFM/data/pp_12M_mmap
-  stat_dir: /global/cfs/cdirs/m4722/NPFM/data/stats
+  data_root: /home/lajoie/ePICWorkDisk/fm4npp/TPCpp_10M/mmap_train
+  stat_dir: /home/lajoie/ePICWorkDisk/fm4npp/PP_collision/stats 
   data_root_train: /mldata/sli/sphenix_fm/pp_100k_mmap-particle_ids/
   data_root_test: /mldata/sli/sphenix_fm/pp_100k_mmap-particle_ids/ 
-  downstream_dir: /pscratch/sd/d/dpark1/NPFN/test
-  checkpoint_dir: /pscratch/sd/d/dpark1/NPFN/test
+  downstream_dir: /home/lajoie/ePICWorkDisk/fm4npp/pscratch
+  checkpoint_dir: /home/lajoie/ePICWorkDisk/fm4npp/PP_collision/checkpoints
 
   # === Data Configuration ===
-  data_version: pp_12M
+  data_version: TPCpp_10M
   batch_size: 4                          # Smaller batch for downstream
   limit_data: true
   limit_size: 100                        # Can use smaller subset for quick testing

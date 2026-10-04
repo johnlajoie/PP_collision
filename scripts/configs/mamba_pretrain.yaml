@@ -4,9 +4,9 @@
 # Default configuration (shared across all variants)
 default: &default
   # === Data Paths (UPDATE THESE) ===
-  data_root: /global/cfs/cdirs/m4722/NPFM/data/pp_12M_mmap  # Directory containing features_train, features_test
-  stat_dir:  /global/homes/d/dpark1/NPFN/PP_collision/fm4npp/datasets/stats         # Directory with normalization statistics
-  checkpoint_dir: /pscratch/sd/d/dpark1/NPFN/test   # Where to save model checkpoints
+  data_root: /home/lajoie/ePICWorkDisk/fm4npp/TPCpp_10M/mmap_train  # Directory containing features_train, features_test
+  stat_dir:  /home/lajoie/ePICWorkDisk/fm4npp/PP_collision/stats         # Directory with normalization statistics
+  checkpoint_dir: /home/lajoie/ePICWorkDisk/fm4npp/checkpoints   # Where to save model checkpoints
 
   # === Data Configuration ===
   data_version: dataset_name
