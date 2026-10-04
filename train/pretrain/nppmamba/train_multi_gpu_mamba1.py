@@ -21,6 +21,8 @@ import torch.nn.init as init
 import torch.optim as optim
 from torch.nn.parallel import DistributedDataParallel
 import torch.distributed as dist
+from torch.distributed._composable.fsdp import fully_shard, MixedPrecisionPolicy
+from torch.distributed.device_mesh import init_device_mesh
 
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data.distributed import DistributedSampler
@@ -68,17 +70,20 @@ class Trainer():
         self.run_num = args.run_num
 
         # Initialize distributed training
-        self.world_rank = 0
-        self.local_rank = 0
-        self.world_size = 1
 
-        if dist.is_initialized():
-            self.world_rank = dist.get_rank()
-            self.local_rank = int(os.environ.get("LOCAL_RANK", 0))
-            self.world_size = dist.get_world_size()
+        self.world_rank = int(os.environ["RANK"])
+        self.local_rank = int(os.environ["LOCAL_RANK"])
+        self.world_size = int(os.environ["WORLD_SIZE"])
 
         self.device = torch.device(f'cuda:{self.local_rank}' if torch.cuda.is_available() else 'cpu')
-        torch.cuda.set_device(self.local_rank)
+        torch.cuda.set_device(self.device)
+
+        dist.init_process_group(
+            backend="nccl" if torch.cuda.is_available() else "gloo",
+            init_method="env://",  # Looks at MASTER_ADDR and MASTER_PORT environment variables
+            world_size=self.world_size,
+            rank=self.world_rank
+        )
 
         # Setup directories
         exp_dir = os.path.join(*[self.root_dir, self.config, self.run_num])
@@ -117,6 +122,16 @@ class Trainer():
         self.train_data_loader, self.train_sampler, self.valid_data_loader, _ = \
             get_data_loader(self.params, dist.is_initialized())
 
+        # 1. Establish the Device Mesh for Data Parallelism
+        device_mesh = init_device_mesh("cuda", (torch.cuda.device_count(),))
+
+        # 2. Define your Mixed Precision Policy (essential for Mamba's numerical stability)
+        # It is highly recommended to keep reduction/scan steps in high precision
+        mp_policy = MixedPrecisionPolicy(
+            param_dtype=torch.float32, 
+            reduce_dtype=torch.float32
+        )
+        
         # Create model - Using Mamba1GPT  
         self.klen = self.params.klen
         d_state = getattr(self.params, 'd_state', 16)
@@ -128,9 +143,8 @@ class Trainer():
             klen=self.klen,
             dropout=self.params.dropout,
             embed_method=self.params.embed_method,
-            pe_method=self.params.pe_method
-        )
-
+            pe_method=self.params.pe_method)
+            
         # Standard initialization
         with torch.no_grad():
             for name, param in self.model.named_parameters():
@@ -139,6 +153,16 @@ class Trainer():
                 elif "bias" in name:
                     init.zeros_(param)
 
+        # 4. Apply FSDP2 functional sharding block-by-block
+        # Sharding individual Mamba blocks ensures efficient memory/communication overlap
+        for name, child in self.model.named_children():
+            if "layers" in name:
+                for layer in child:
+                    fully_shard(layer); 
+            
+        # 5. Shard the root container
+        fully_shard(self.model, mesh=device_mesh, mp_policy=mp_policy)
+            
         if self.world_rank == 0:
             print(f"✅ Mamba1GPT Model Initialized")
             print(f"   D state: {d_state}")
@@ -149,13 +173,13 @@ class Trainer():
             print(f'Nparams: {count_parameters(self.model):,}')
 
         # Distributed wrapper
-        if dist.is_initialized():
-            self.model = DistributedDataParallel(
-                self.model,
-                device_ids=[self.local_rank],
-                output_device=[self.local_rank],
-                find_unused_parameters=True
-            )
+        #if dist.is_initialized():
+        #    self.model = DistributedDataParallel(
+        #        self.model,
+        #        device_ids=[self.local_rank],
+        #        output_device=[self.local_rank],
+        #        find_unused_parameters=True
+        #    )
 
         # Standard optimizer (no μ-transfer)
         # Simple AdamW with single learning rate for all parameters

@@ -40,16 +40,6 @@ def run_pretrain(config, run_num, num_gpus=1):
     project_root = setup_environment()
     config_file = os.path.join(project_root, 'scripts/configs/mamba_pretrain.yaml')
 
-#    cmd = [
-#        sys.executable,
-#        '-m', 'torch.distributed.launch',
-#        f'--nproc_per_node={num_gpus}',
-#        '-m', 'train.pretrain.nppmamba.train_multi_gpu_mamba1',
-#        f'--yaml_config={config_file}',
-#        f'--config={config}',
-#        f'--run_num={run_num}'
-#    ]
-
     cmd = [
         'torchrun',
         f'--nproc_per_node={num_gpus}',
@@ -67,16 +57,6 @@ def run_downstream(config, run_num, num_gpus=1):
     project_root = setup_environment()
     config_file = os.path.join(project_root, 'scripts/configs/mamba_tracking.yaml')
     training_script = os.path.join(project_root, 'train/downstream/track_finding_trainer.py')
-
-#    cmd = [
-#        sys.executable,
-#        '-m', 'torch.distributed.launch',
-#        f'--nproc_per_node={num_gpus}',
-#        training_script,
-#        f'--yaml_config={config_file}',
-#        f'--config={config}',
-#        f'--run_num={run_num}'
-#    ]
 
     cmd = [
         'torchrun',
