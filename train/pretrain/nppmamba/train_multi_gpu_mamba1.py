@@ -512,8 +512,12 @@ class Trainer():
             print("\n" + "="*80)
             print("TRAINING COMPLETE")
             print("="*80)
- 
- 
+
+        # Cleanup - prevent faster ranks from tearing down the process group
+        if dist.is_initialized():
+            dist.barrier() 
+            dist.destroy_process_group()
+            
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--yaml_config", default='./config/AFNO.yaml', type=str)
